@@ -1,4 +1,8 @@
-import { applyDisplayOptions, convertPdfBuffer, pinsToColumns } from "./parser.js";
+import {
+  applyDisplayOptions,
+  convertPdfBuffer,
+  pinsToColumns,
+} from "./parser.js?v=5";
 
 const $ = (sel) => document.querySelector(sel);
 

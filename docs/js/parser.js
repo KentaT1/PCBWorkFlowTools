@@ -59,12 +59,14 @@ function splitCommaParts(text) {
 }
 
 function looksLikeFunctionSpan(span) {
+  let sawToken = false;
   for (const part of splitCommaParts(span.text)) {
     const token = part.trim().replace(/,$/, "").trim();
     if (!token) continue;
+    sawToken = true;
     if (!FUNC_TOKEN_RE.test(token)) return false;
   }
-  return true;
+  return sawToken;
 }
 
 function classifySpans(spans) {
@@ -94,9 +96,10 @@ function isTableHeader(spans) {
   return joined.includes("Name") && joined.includes("Function");
 }
 
-function isContinuationLine(spans) {
-  const { name, numbers, pinType, functions } = classifySpans(spans);
-  return !name && !numbers && !pinType && functions.length > 0;
+/** Wrapped function text (no pin name/number on this PDF line). */
+function isFunctionOnlyLine(spans) {
+  const { name, numbers, functions } = classifySpans(spans);
+  return !(name && numbers) && functions.some(looksLikeFunctionSpan);
 }
 
 function isAnchorLine(spans) {
@@ -109,6 +112,8 @@ function attachFunctionSpans(row, extra) {
     if (looksLikeFunctionSpan(s)) row.functionSpans.push(s);
   }
 }
+
+const WRAP_Y_DISTANCE = 22;
 
 function mergeLinesToRows(lines) {
   const filtered = lines.filter(([, , spans]) => !isTableHeader(spans));
@@ -135,7 +140,7 @@ function mergeLinesToRows(lines) {
         pinType,
         functionSpans: functions.filter(looksLikeFunctionSpan),
       });
-    } else if (isContinuationLine(spans)) {
+    } else if (isFunctionOnlyLine(spans)) {
       funcLines.push({ y, page, spans });
     } else if (name && !numbers) {
       pendingName = {
@@ -149,8 +154,26 @@ function mergeLinesToRows(lines) {
     }
   }
 
+  const assigned = new Array(funcLines.length).fill(-1);
+  for (let fi = 0; fi < funcLines.length; fi++) {
+    const fl = funcLines[fi];
+    let best = -1;
+    let bestDist = WRAP_Y_DISTANCE + 1;
+    for (let ai = 0; ai < anchors.length; ai++) {
+      const a = anchors[ai];
+      if (fl.page !== a.page) continue;
+      const dist = Math.abs(fl.y - a.y);
+      if (dist <= WRAP_Y_DISTANCE && dist < bestDist) {
+        bestDist = dist;
+        best = ai;
+      }
+    }
+    assigned[fi] = best;
+  }
+
   const rows = [];
-  for (const anchor of anchors) {
+  for (let ai = 0; ai < anchors.length; ai++) {
+    const anchor = anchors[ai];
     const row = {
       name: anchor.name,
       numbers: anchor.numbers,
@@ -160,7 +183,7 @@ function mergeLinesToRows(lines) {
       page: anchor.page,
     };
     const nearby = funcLines
-      .filter((fl) => fl.page === anchor.page && Math.abs(fl.y - anchor.y) <= 20)
+      .filter((_, fi) => assigned[fi] === ai)
       .sort((a, b) => b.y - a.y);
     for (const fl of nearby) {
       attachFunctionSpans(row, classifySpans(fl.spans).functions);
@@ -192,12 +215,10 @@ function tokenizeFunctions(spans) {
 }
 
 function formatDisplayName(row) {
-  if (row.functionSpans.length) {
-    const tokens = tokenizeFunctions(row.functionSpans);
-    if (tokens.length && tokens.every((t) => FUNC_TOKEN_RE.test(t))) {
-      return tokens.join("/");
-    }
-  }
+  if (!row.functionSpans.length) return row.name;
+  const tokens = tokenizeFunctions(row.functionSpans);
+  const valid = tokens.filter((t) => FUNC_TOKEN_RE.test(t));
+  if (valid.length) return valid.join("/");
   return row.name;
 }
 

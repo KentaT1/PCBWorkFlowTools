@@ -108,7 +108,12 @@ def classify_spans(spans: list[Span]) -> tuple[str, str, str, list[Span]]:
             name = text
         elif NUM_X_MIN <= x <= NUM_X_MAX and not numbers and NUM_LIST_RE.match(text):
             numbers = text
-        elif TYPE_X_MIN <= x <= TYPE_X_MAX and not pin_type and len(text) <= 8:
+        elif (
+            TYPE_X_MIN <= x <= TYPE_X_MAX
+            and not pin_type
+            and len(text) <= 8
+            and text.strip()
+        ):
             pin_type = text
         elif x >= FUNC_X_MIN:
             functions.append(sp)
@@ -118,13 +123,15 @@ def classify_spans(spans: list[Span]) -> tuple[str, str, str, list[Span]]:
 
 def looks_like_function_span(span: Span) -> bool:
     """True if span text looks like comma-separated signal names, not prose."""
+    saw_token = False
     for part in re.split(r",\s*", span.text):
         token = part.strip().rstrip(",").strip()
         if not token:
             continue
+        saw_token = True
         if not FUNC_TOKEN_RE.match(token):
             return False
-    return True
+    return saw_token
 
 
 def is_table_header(spans: list[Span]) -> bool:
@@ -132,9 +139,14 @@ def is_table_header(spans: list[Span]) -> bool:
     return "Name" in joined and "Function" in joined
 
 
-def is_continuation_line(spans: list[Span]) -> bool:
-    name, numbers, pin_type, functions = classify_spans(spans)
-    return not name and not numbers and not pin_type and bool(functions)
+def is_function_only_line(spans: list[Span]) -> bool:
+    name, numbers, _, functions = classify_spans(spans)
+    return not (name and numbers) and any(
+        looks_like_function_span(s) for s in functions
+    )
+
+
+WRAP_Y_DISTANCE = 22
 
 
 def is_anchor_line(spans: list[Span]) -> bool:
@@ -177,7 +189,7 @@ def merge_lines_to_rows(lines: list[tuple[float, int, list[Span]]]) -> list[PinR
                     [s for s in functions if looks_like_function_span(s)],
                 )
             )
-        elif is_continuation_line(spans):
+        elif is_function_only_line(spans):
             func_lines.append((y, page, spans))
         elif name and not numbers:
             pending_name = PinRow(
@@ -189,8 +201,21 @@ def merge_lines_to_rows(lines: list[tuple[float, int, list[Span]]]) -> list[PinR
                 page=page,
             )
 
+    assigned = [-1] * len(func_lines)
+    for fi, (fy, fpage, _) in enumerate(func_lines):
+        best = -1
+        best_dist = WRAP_Y_DISTANCE + 1
+        for ai, (ay, apage, *_rest) in enumerate(anchors):
+            if fpage != apage:
+                continue
+            dist = abs(fy - ay)
+            if dist <= WRAP_Y_DISTANCE and dist < best_dist:
+                best_dist = dist
+                best = ai
+        assigned[fi] = best
+
     rows: list[PinRow] = []
-    for y, page, name, numbers, pin_type, anchor_funcs in anchors:
+    for ai, (y, page, name, numbers, pin_type, anchor_funcs) in enumerate(anchors):
         row = PinRow(
             name=name,
             numbers=numbers,
@@ -200,7 +225,7 @@ def merge_lines_to_rows(lines: list[tuple[float, int, list[Span]]]) -> list[PinR
             page=page,
         )
         for fy, fpage, fspans in sorted(
-            (fl for fl in func_lines if fl[1] == page and abs(fl[0] - y) <= 20),
+            (func_lines[fi] for fi, a in enumerate(assigned) if a == ai),
             key=lambda fl: fl[0],
             reverse=True,
         ):
@@ -240,10 +265,12 @@ def tokenize_functions(spans: list[Span]) -> list[str]:
 
 
 def format_display_name(row: PinRow) -> str:
-    if row.function_spans:
-        tokens = tokenize_functions(row.function_spans)
-        if tokens and all(FUNC_TOKEN_RE.match(t) for t in tokens):
-            return "/".join(tokens)
+    if not row.function_spans:
+        return row.name
+    tokens = tokenize_functions(row.function_spans)
+    valid = [t for t in tokens if FUNC_TOKEN_RE.match(t)]
+    if valid:
+        return "/".join(valid)
     return row.name
 
 
