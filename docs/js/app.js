@@ -2,9 +2,14 @@ import {
   applyDisplayOptions,
   convertPdfBuffer,
   pinsToColumns,
-} from "./parser.js?v=8";
+} from "./parser.js?v=9";
+
+export const APP_VERSION = "1.1.0";
 
 const $ = (sel) => document.querySelector(sel);
+
+const versionBadge = $("#app-version");
+if (versionBadge) versionBadge.textContent = `v${APP_VERSION}`;
 
 const fileInput = $("#pdf-file");
 const includePinName = $("#include-pin-name");
