@@ -1,4 +1,9 @@
-# PDF to Altium Pin Table
+# PCB WorkFlow Tools
+
+Altium Designer utilities — starting with **PDF → Pin Table** for Symbol Wizard.
+
+**Live app:** [kentat1.github.io/PCBWorkFlowTools](https://kentat1.github.io/PCBWorkFlowTools/)  
+**Repository:** [github.com/KentaT1/PCBWorkFlowTools](https://github.com/KentaT1/PCBWorkFlowTools)
 
 Convert datasheet **pin definition** PDFs into columns for Altium Designer’s **Symbol Wizard**. Default (bold) functions are listed first; alternates use `/` instead of commas. Pin lists like `46-65` expand to one row per pin.
 
@@ -6,14 +11,11 @@ Convert datasheet **pin definition** PDFs into columns for Altium Designer’s *
 
 The web app runs **entirely in your browser** — your PDF is never uploaded to a server.
 
-### Deploy to GitHub Pages
+### Enable GitHub Pages (first time)
 
-1. Create a GitHub repo and push this project.
-2. On GitHub: **Settings → Pages → Build and deployment**
-   - **Source:** GitHub Actions  
-   (or **Deploy from branch** → branch `main` → folder `/docs`)
-3. Push to `main`. The workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) publishes the `docs/` folder.
-4. Open `https://<your-username>.github.io/<repo-name>/`
+1. Push this repo to [PCBWorkFlowTools](https://github.com/KentaT1/PCBWorkFlowTools).
+2. On GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**
+3. After the workflow runs, open [kentat1.github.io/PCBWorkFlowTools](https://kentat1.github.io/PCBWorkFlowTools/)
 
 ### Preview locally
 
