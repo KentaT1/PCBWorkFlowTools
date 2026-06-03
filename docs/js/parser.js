@@ -13,11 +13,45 @@ const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_+\-]*$/;
 const NUM_LIST_RE = /^[\d\s,\-]+$/;
 const FUNC_TOKEN_RE = /^[A-Z][A-Z0-9_+.\-]*$/;
 
-function spanIsDefault(fontName, style) {
+/** Standalone GPIO labels reliably use the default (medium) font in Espressif PDFs. */
+const GPIO_DEFAULT_TOKEN = /^GPIO\d+$/;
+
+function spanIsDefaultFromStyle(fontName, style) {
   const name = (fontName || "") + (style?.fontFamily || "");
   if (/Medium|Bold|Semibold/i.test(name)) return true;
   if (style?.fontWeight && style.fontWeight >= 600) return true;
   return false;
+}
+
+/**
+ * PDF.js uses internal font ids (g_d0_f1, g_d0_f3), not family names.
+ * Learn default font ids only from single-token text runs (one font = one token).
+ */
+function calibrateDefaultFonts(items) {
+  const defaultFonts = new Set();
+
+  for (const item of items) {
+    if (item.x < FUNC_X_MIN) continue;
+    const trimmed = item.text.trim();
+    // Skip continuation fragments like ", GPIO42" (wrong font for calibration)
+    if (trimmed.startsWith(",")) continue;
+    const parts = splitCommaParts(trimmed)
+      .map((p) => p.trim().replace(/,$/, "").trim())
+      .filter(Boolean);
+    if (parts.length !== 1) continue;
+    if (GPIO_DEFAULT_TOKEN.test(parts[0])) {
+      defaultFonts.add(item.fontName);
+    }
+  }
+
+  return defaultFonts;
+}
+
+function itemIsDefault(item, defaultFonts, style) {
+  if (defaultFonts.size > 0) {
+    return defaultFonts.has(item.fontName);
+  }
+  return spanIsDefaultFromStyle(item.fontName, style);
 }
 
 function splitCommaParts(text) {
@@ -108,7 +142,7 @@ function mergeLinesToRows(lines) {
         page,
       };
       for (const [fy, fpage, fspans] of pendingFuncs) {
-        if (fpage === page && fy < y && y - fy <= 20) {
+        if (fpage === page && fy > y && fy - y <= 20) {
           attachFunctionSpans(row, classifySpans(fspans).functions);
         }
       }
@@ -118,7 +152,12 @@ function mergeLinesToRows(lines) {
       let extra = classifySpans(spans).functions.filter(looksLikeFunctionSpan);
       if (rows.length && extra.length) {
         const last = rows[rows.length - 1];
-        if (page === last.page && y > last.yAnchor && y - last.yAnchor <= 20 && rowNeedsMoreFunctions(last)) {
+        if (
+          page === last.page &&
+          y < last.yAnchor &&
+          last.yAnchor - y <= 20 &&
+          rowNeedsMoreFunctions(last)
+        ) {
           attachFunctionSpans(last, extra);
           continue;
         }
@@ -228,18 +267,24 @@ async function extractLinesFromPdf(pdf, yTolerance = 2) {
 
     for (const item of textContent.items) {
       if (!("str" in item) || !item.str.trim()) continue;
-      const style = styles[item.fontName] || {};
       items.push({
         x: item.transform[4],
         y: item.transform[5],
         page: pageIndex,
         text: item.str,
-        isDefault: spanIsDefault(item.fontName, style),
+        fontName: item.fontName,
+        style: styles[item.fontName] || {},
       });
     }
   }
 
-  items.sort((a, b) => a.page - b.page || b.y - a.y);
+  const defaultFonts = calibrateDefaultFonts(items);
+  for (const item of items) {
+    item.isDefault = itemIsDefault(item, defaultFonts, item.style);
+  }
+
+  // PDF y-axis points up; sort top-to-bottom for table row order
+  items.sort((a, b) => a.page - b.page || a.y - b.y);
 
   const lines = [];
   for (const item of items) {
@@ -270,17 +315,33 @@ async function extractLinesFromPdf(pdf, yTolerance = 2) {
   ]);
 }
 
+async function loadPdfJs() {
+  if (typeof globalThis.document !== "undefined") {
+    const pdfjsLib = await import(
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.mjs"
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.mjs";
+    return pdfjsLib;
+  }
+  const { pathToFileURL } = await import("node:url");
+  const { dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const build = join(root, "node_modules", "pdfjs-dist", "build");
+  const pdfjsLib = await import(pathToFileURL(join(build, "pdf.mjs")).href);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
+    join(build, "pdf.worker.mjs")
+  ).href;
+  return pdfjsLib;
+}
+
 /**
  * @param {ArrayBuffer} pdfData
  * @returns {Promise<{designator:number, displayName:string, electricalType:string, pinName:string}[]>}
  */
 export async function convertPdfBuffer(pdfData) {
-  const pdfjsLib = await import(
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.mjs"
-  );
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.mjs";
-
+  const pdfjsLib = await loadPdfJs();
   const loadingTask = pdfjsLib.getDocument({ data: pdfData });
   const pdf = await loadingTask.promise;
   const lines = await extractLinesFromPdf(pdf);
