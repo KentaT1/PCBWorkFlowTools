@@ -371,7 +371,8 @@ export function applyDisplayOptions(pins, options = {}) {
   if (!options.numberGnd) return pins;
   return pins.map((p) => {
     if (p.displayName !== "GND") return p;
-    return { ...p, displayName: `GND_${p.designator}` };
+    const num = String(p.designator).padStart(2, "0");
+    return { ...p, displayName: `GND_${num}` };
   });
 }
 
