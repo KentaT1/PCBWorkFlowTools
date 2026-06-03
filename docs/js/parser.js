@@ -369,11 +369,9 @@ export async function convertPdfBuffer(pdfData) {
  */
 export function applyDisplayOptions(pins, options = {}) {
   if (!options.numberGnd) return pins;
-  let gndIndex = 0;
   return pins.map((p) => {
     if (p.displayName !== "GND") return p;
-    gndIndex += 1;
-    return { ...p, displayName: `GND_${gndIndex}` };
+    return { ...p, displayName: `GND_${p.designator}` };
   });
 }
 

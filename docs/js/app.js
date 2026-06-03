@@ -2,7 +2,7 @@ import {
   applyDisplayOptions,
   convertPdfBuffer,
   pinsToColumns,
-} from "./parser.js?v=5";
+} from "./parser.js?v=6";
 
 const $ = (sel) => document.querySelector(sel);
 
