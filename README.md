@@ -11,11 +11,18 @@ Convert datasheet **pin definition** PDFs into columns for Altium Designer’s *
 
 The web app runs **entirely in your browser** — your PDF is never uploaded to a server.
 
-### Enable GitHub Pages (first time)
+### Enable GitHub Pages (no Actions required)
 
-1. Push this repo to [PCBWorkFlowTools](https://github.com/KentaT1/PCBWorkFlowTools).
-2. On GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**
-3. After the workflow runs, open [kentat1.github.io/PCBWorkFlowTools](https://kentat1.github.io/PCBWorkFlowTools/)
+If GitHub Actions fail with *“account is locked due to a billing issue”*, use **branch deploy** instead — it does not use Actions minutes.
+
+1. Open [PCBWorkFlowTools → Settings → Pages](https://github.com/KentaT1/PCBWorkFlowTools/settings/pages).
+2. **Build and deployment → Source:** choose **Deploy from a branch**.
+3. **Branch:** `main` · **Folder:** `/docs` · **Save**.
+4. Wait 1–2 minutes, then open [kentat1.github.io/PCBWorkFlowTools](https://kentat1.github.io/PCBWorkFlowTools/).
+
+To fix Actions later: resolve billing at [github.com/settings/billing](https://github.com/settings/billing), then you can switch to **GitHub Actions** as the Pages source if you prefer.
+
+**Preview without hosting:** run `npx --yes serve docs` locally (see below).
 
 ### Preview locally
 

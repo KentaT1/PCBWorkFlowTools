@@ -1,8 +1,8 @@
 name: Deploy GitHub Pages
 
+# Optional: only runs manually. Use Settings → Pages → "Deploy from branch" (/docs)
+# if Actions are blocked (e.g. account billing lock).
 on:
-  push:
-    branches: [main, master]
   workflow_dispatch:
 
 permissions:
