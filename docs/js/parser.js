@@ -110,16 +110,10 @@ function attachFunctionSpans(row, extra) {
   }
 }
 
-function rowNeedsMoreFunctions(row) {
-  if (!row.functionSpans.length) return true;
-  const last = row.functionSpans[row.functionSpans.length - 1].text.trimEnd();
-  return last.endsWith(",");
-}
-
 function mergeLinesToRows(lines) {
   const filtered = lines.filter(([, , spans]) => !isTableHeader(spans));
-  const rows = [];
-  const pendingFuncs = [];
+  const funcLines = [];
+  const anchors = [];
   let pendingName = null;
 
   for (const [y, page, spans] of filtered) {
@@ -133,36 +127,16 @@ function mergeLinesToRows(lines) {
         name = pendingName.name;
         pendingName = null;
       }
-      const row = {
+      anchors.push({
+        y,
+        page,
         name,
         numbers,
         pinType,
         functionSpans: functions.filter(looksLikeFunctionSpan),
-        yAnchor: y,
-        page,
-      };
-      for (const [fy, fpage, fspans] of pendingFuncs) {
-        if (fpage === page && fy > y && fy - y <= 20) {
-          attachFunctionSpans(row, classifySpans(fspans).functions);
-        }
-      }
-      pendingFuncs.length = 0;
-      rows.push(row);
+      });
     } else if (isContinuationLine(spans)) {
-      let extra = classifySpans(spans).functions.filter(looksLikeFunctionSpan);
-      if (rows.length && extra.length) {
-        const last = rows[rows.length - 1];
-        if (
-          page === last.page &&
-          y < last.yAnchor &&
-          last.yAnchor - y <= 20 &&
-          rowNeedsMoreFunctions(last)
-        ) {
-          attachFunctionSpans(last, extra);
-          continue;
-        }
-      }
-      pendingFuncs.push([y, page, spans]);
+      funcLines.push({ y, page, spans });
     } else if (name && !numbers) {
       pendingName = {
         name: name.replace(/b$/, ""),
@@ -173,6 +147,25 @@ function mergeLinesToRows(lines) {
         page,
       };
     }
+  }
+
+  const rows = [];
+  for (const anchor of anchors) {
+    const row = {
+      name: anchor.name,
+      numbers: anchor.numbers,
+      pinType: anchor.pinType,
+      functionSpans: [...anchor.functionSpans],
+      yAnchor: anchor.y,
+      page: anchor.page,
+    };
+    const nearby = funcLines
+      .filter((fl) => fl.page === anchor.page && Math.abs(fl.y - anchor.y) <= 20)
+      .sort((a, b) => b.y - a.y);
+    for (const fl of nearby) {
+      attachFunctionSpans(row, classifySpans(fl.spans).functions);
+    }
+    rows.push(row);
   }
   return rows;
 }
@@ -347,6 +340,20 @@ export async function convertPdfBuffer(pdfData) {
   const lines = await extractLinesFromPdf(pdf);
   const rows = mergeLinesToRows(lines);
   return rowsToOutputPins(rows);
+}
+
+/**
+ * @param {{designator:number, displayName:string, electricalType:string, pinName:string}[]} pins
+ * @param {{ numberGnd?: boolean }} [options]
+ */
+export function applyDisplayOptions(pins, options = {}) {
+  if (!options.numberGnd) return pins;
+  let gndIndex = 0;
+  return pins.map((p) => {
+    if (p.displayName !== "GND") return p;
+    gndIndex += 1;
+    return { ...p, displayName: `GND_${gndIndex}` };
+  });
 }
 
 export function pinsToColumns(pins, includePinName = false) {

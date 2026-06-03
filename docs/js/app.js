@@ -1,9 +1,10 @@
-import { convertPdfBuffer, pinsToColumns } from "./parser.js";
+import { applyDisplayOptions, convertPdfBuffer, pinsToColumns } from "./parser.js";
 
 const $ = (sel) => document.querySelector(sel);
 
 const fileInput = $("#pdf-file");
 const includePinName = $("#include-pin-name");
+const numberGnd = $("#number-gnd");
 const convertBtn = $("#convert-btn");
 const statusEl = $("#status");
 const columnsEl = $("#columns");
@@ -27,7 +28,12 @@ async function copyText(text, label) {
   setStatus(label);
 }
 
-function renderColumns(pins) {
+function getDisplayPins() {
+  return applyDisplayOptions(lastPins, { numberGnd: numberGnd.checked });
+}
+
+function renderColumns() {
+  const pins = getDisplayPins();
   const cols = pinsToColumns(pins, includePinName.checked);
   columnsEl.innerHTML = "";
   emptyEl.hidden = true;
@@ -88,7 +94,7 @@ async function onConvert() {
       return;
     }
     lastPins = pins;
-    renderColumns(pins);
+    renderColumns();
   } catch (err) {
     console.error(err);
     showError(err.message || String(err));
@@ -100,13 +106,16 @@ async function onConvert() {
 
 convertBtn.addEventListener("click", onConvert);
 includePinName.addEventListener("change", () => {
-  if (lastPins.length) renderColumns(lastPins);
+  if (lastPins.length) renderColumns();
+});
+numberGnd.addEventListener("change", () => {
+  if (lastPins.length) renderColumns();
 });
 
 const copyTsvBtn = $("#copy-tsv");
 copyTsvBtn?.addEventListener("click", async () => {
   if (!lastPins.length) return;
-  const cols = pinsToColumns(lastPins, includePinName.checked);
+  const cols = pinsToColumns(getDisplayPins(), includePinName.checked);
   const names = Object.keys(cols);
   const rows = cols[names[0]].map((_, i) => names.map((n) => cols[n][i]).join("\t"));
   await copyText([names.join("\t"), ...rows].join("\n"), "Copied full table (TSV)");

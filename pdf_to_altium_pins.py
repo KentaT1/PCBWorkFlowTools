@@ -146,13 +146,6 @@ def _attach_function_spans(row: PinRow, extra: list[Span]) -> None:
     row.function_spans.extend(s for s in extra if looks_like_function_span(s))
 
 
-def _row_needs_more_functions(row: PinRow) -> bool:
-    if not row.function_spans:
-        return True
-    last = row.function_spans[-1].text.rstrip()
-    return last.endswith(",")
-
-
 def merge_lines_to_rows(lines: list[tuple[float, int, list[Span]]]) -> list[PinRow]:
     """Group PDF lines into logical pin table rows."""
     filtered = [
@@ -160,10 +153,9 @@ def merge_lines_to_rows(lines: list[tuple[float, int, list[Span]]]) -> list[PinR
         for y, page, spans in lines
         if not is_table_header(spans)
     ]
-    filtered.sort(key=lambda item: (item[1], item[0]))
 
-    rows: list[PinRow] = []
-    pending_funcs: list[tuple[float, int, list[Span]]] = []
+    func_lines: list[tuple[float, int, list[Span]]] = []
+    anchors: list[tuple[float, int, str, str, str, list[Span]]] = []
     pending_name: PinRow | None = None
 
     for y, page, spans in filtered:
@@ -175,45 +167,46 @@ def merge_lines_to_rows(lines: list[tuple[float, int, list[Span]]]) -> list[PinR
             if pending_name and not name:
                 name = pending_name.name
                 pending_name = None
-            row = PinRow(
-                name=name,
-                numbers=numbers,
-                pin_type=pin_type,
+            anchors.append(
+                (
+                    y,
+                    page,
+                    name,
+                    numbers,
+                    pin_type,
+                    [s for s in functions if looks_like_function_span(s)],
+                )
+            )
+        elif is_continuation_line(spans):
+            func_lines.append((y, page, spans))
+        elif name and not numbers:
+            pending_name = PinRow(
+                name=name.rstrip("b"),
+                numbers="",
+                pin_type="",
                 function_spans=[s for s in functions if looks_like_function_span(s)],
                 y_anchor=y,
                 page=page,
             )
-            for fy, fpage, fspans in pending_funcs:
-                if fpage == page and fy < y and y - fy <= 20:
-                    _, _, _, extra = classify_spans(fspans)
-                    _attach_function_spans(row, extra)
-            pending_funcs.clear()
-            rows.append(row)
-        elif is_continuation_line(spans):
-            _, _, _, extra = classify_spans(spans)
-            extra = [s for s in extra if looks_like_function_span(s)]
-            if rows and extra:
-                last = rows[-1]
-                if (
-                    page == last.page
-                    and y > last.y_anchor
-                    and y - last.y_anchor <= 20
-                    and _row_needs_more_functions(last)
-                ):
-                    _attach_function_spans(last, extra)
-                    continue
-            pending_funcs.append((y, page, spans))
-        elif name and not numbers:
-                pending_name = PinRow(
-                    name=name.rstrip("b"),
-                    numbers="",
-                    pin_type="",
-                    function_spans=[
-                        s for s in functions if looks_like_function_span(s)
-                    ],
-                    y_anchor=y,
-                    page=page,
-                )
+
+    rows: list[PinRow] = []
+    for y, page, name, numbers, pin_type, anchor_funcs in anchors:
+        row = PinRow(
+            name=name,
+            numbers=numbers,
+            pin_type=pin_type,
+            function_spans=list(anchor_funcs),
+            y_anchor=y,
+            page=page,
+        )
+        for fy, fpage, fspans in sorted(
+            (fl for fl in func_lines if fl[1] == page and abs(fl[0] - y) <= 20),
+            key=lambda fl: fl[0],
+            reverse=True,
+        ):
+            _, _, _, extra = classify_spans(fspans)
+            _attach_function_spans(row, extra)
+        rows.append(row)
 
     return rows
 
