@@ -214,11 +214,19 @@ function tokenizeFunctions(spans) {
   return [...defaults, ...others];
 }
 
-function formatDisplayName(row) {
-  if (!row.functionSpans.length) return row.name;
-  const tokens = tokenizeFunctions(row.functionSpans);
-  const valid = tokens.filter((t) => FUNC_TOKEN_RE.test(t));
-  if (valid.length) return valid.join("/");
+function getFunctionTokens(row) {
+  if (!row.functionSpans.length) return [];
+  return tokenizeFunctions(row.functionSpans).filter((t) => FUNC_TOKEN_RE.test(t));
+}
+
+export function joinFunctionTokens(tokens, separator = "/") {
+  if (!tokens.length) return "";
+  return tokens.join(separator);
+}
+
+function formatDisplayName(row, separator = "/") {
+  const tokens = getFunctionTokens(row);
+  if (tokens.length) return joinFunctionTokens(tokens, separator);
   return row.name;
 }
 
@@ -252,12 +260,14 @@ function rowsToOutputPins(rows) {
   const output = [];
   for (const row of rows) {
     if (!row.numbers) continue;
+    const tokens = getFunctionTokens(row);
     const display = formatDisplayName(row);
     const etype = altiumElectricalType(row.pinType);
     for (const num of expandPinNumbers(row.numbers)) {
       output.push({
         designator: num,
         displayName: display,
+        functionTokens: tokens.length ? [...tokens] : null,
         electricalType: etype,
         pinName: row.name,
       });
@@ -364,15 +374,21 @@ export async function convertPdfBuffer(pdfData) {
 }
 
 /**
- * @param {{designator:number, displayName:string, electricalType:string, pinName:string}[]} pins
- * @param {{ numberGnd?: boolean }} [options]
+ * @param {{designator:number, displayName:string, functionTokens:string[]|null, electricalType:string, pinName:string}[]} pins
+ * @param {{ numberGnd?: boolean, separator?: string }} [options]
  */
 export function applyDisplayOptions(pins, options = {}) {
-  if (!options.numberGnd) return pins;
+  const separator = options.separator ?? "/";
   return pins.map((p) => {
-    if (p.displayName !== "GND") return p;
-    const num = String(p.designator).padStart(2, "0");
-    return { ...p, displayName: `GND_${num}` };
+    let displayName = p.displayName;
+    if (p.functionTokens?.length) {
+      displayName = joinFunctionTokens(p.functionTokens, separator);
+    }
+    if (options.numberGnd && displayName === "GND") {
+      const num = String(p.designator).padStart(2, "0");
+      displayName = `GND_${num}`;
+    }
+    return { ...p, displayName };
   });
 }
 

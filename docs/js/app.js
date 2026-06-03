@@ -2,13 +2,14 @@ import {
   applyDisplayOptions,
   convertPdfBuffer,
   pinsToColumns,
-} from "./parser.js?v=7";
+} from "./parser.js?v=8";
 
 const $ = (sel) => document.querySelector(sel);
 
 const fileInput = $("#pdf-file");
 const includePinName = $("#include-pin-name");
 const numberGnd = $("#number-gnd");
+const functionSeparator = $("#function-separator");
 const convertBtn = $("#convert-btn");
 const statusEl = $("#status");
 const columnsEl = $("#columns");
@@ -32,8 +33,16 @@ async function copyText(text, label) {
   setStatus(label);
 }
 
+function getSeparator() {
+  const value = functionSeparator?.value ?? "/";
+  return value.length ? value : "/";
+}
+
 function getDisplayPins() {
-  return applyDisplayOptions(lastPins, { numberGnd: numberGnd.checked });
+  return applyDisplayOptions(lastPins, {
+    numberGnd: numberGnd.checked,
+    separator: getSeparator(),
+  });
 }
 
 function renderColumns() {
@@ -114,6 +123,17 @@ includePinName.addEventListener("change", () => {
 });
 numberGnd.addEventListener("change", () => {
   if (lastPins.length) renderColumns();
+});
+
+functionSeparator?.addEventListener("input", () => {
+  if (lastPins.length) renderColumns();
+});
+
+document.querySelectorAll(".sep-preset").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (functionSeparator) functionSeparator.value = btn.dataset.sep ?? "/";
+    if (lastPins.length) renderColumns();
+  });
 });
 
 const copyTsvBtn = $("#copy-tsv");

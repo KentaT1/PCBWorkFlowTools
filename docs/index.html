@@ -38,6 +38,26 @@
             Number GND pins (GND_01, GND_46, … uses pin number)
           </label>
         </div>
+        <div class="options separator-option">
+          <label for="function-separator">Function separator</label>
+          <div class="separator-controls">
+            <input
+              type="text"
+              id="function-separator"
+              value="/"
+              maxlength="4"
+              size="3"
+              title="Character between alternate pin functions"
+            />
+            <span class="sep-presets">
+              <button type="button" class="btn secondary sep-preset" data-sep="/">/</button>
+              <button type="button" class="btn secondary sep-preset" data-sep="-">-</button>
+              <button type="button" class="btn secondary sep-preset" data-sep=",">,</button>
+              <button type="button" class="btn secondary sep-preset" data-sep=".">.</button>
+            </span>
+          </div>
+          <span class="option-hint">e.g. GPIO1/RTC_GPIO1 or GPIO1-RTC_GPIO1</span>
+        </div>
         <div class="actions">
           <button type="button" class="btn" id="convert-btn">Convert</button>
           <button type="button" class="btn secondary" id="copy-tsv" hidden>
@@ -69,6 +89,6 @@
       </footer>
     </div>
 
-    <script type="module" src="js/app.js?v=7"></script>
+    <script type="module" src="js/app.js?v=8"></script>
   </body>
 </html>
