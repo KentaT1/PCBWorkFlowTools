@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF to Altium Pin Table</title>
+    <meta
+      name="description"
+      content="Convert datasheet pin definition PDFs to Altium Symbol Wizard columns. Runs in your browser; PDF never leaves your device."
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>PDF → Altium Pin Table</h1>
+        <p>
+          Upload a datasheet pin-definition PDF (e.g. Espressif modules). Get
+          separate columns for <strong>Designator</strong>,
+          <strong>Display Name</strong>, and <strong>Electrical Type</strong> to
+          paste into Altium’s Symbol Wizard. Processing happens entirely in your
+          browser.
+        </p>
+      </header>
+
+      <section class="panel">
+        <h2>1. Upload PDF</h2>
+        <div class="file-row">
+          <input type="file" id="pdf-file" accept="application/pdf,.pdf" />
+        </div>
+        <div class="options">
+          <label>
+            <input type="checkbox" id="include-pin-name" />
+            Include Pin Name column
+          </label>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn" id="convert-btn">Convert</button>
+          <button type="button" class="btn secondary" id="copy-tsv" hidden>
+            Copy all (TSV)
+          </button>
+        </div>
+        <p id="status">Choose a PDF, then click Convert.</p>
+        <div id="error" hidden></div>
+      </section>
+
+      <section>
+        <h2 style="font-size: 1rem; margin-bottom: 0.75rem">2. Copy columns</h2>
+        <p style="color: var(--muted); font-size: 0.9rem; margin-top: 0">
+          Use <strong>Copy column</strong> (or select all in a box) and paste into
+          the matching Symbol Wizard field.
+        </p>
+        <div id="empty-state" style="margin-top: 1rem">
+          Results appear here after conversion.
+        </div>
+        <div id="columns" class="columns"></div>
+      </section>
+
+      <footer>
+        <p>
+          Open source —
+          <a href="https://github.com/">GitHub</a>. Deployed with GitHub Pages.
+          Optional local CLI/GUI in the repo.
+        </p>
+      </footer>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

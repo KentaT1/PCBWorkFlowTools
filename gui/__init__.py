@@ -1,0 +1,1 @@
+"""Altium Tools GUI package."""

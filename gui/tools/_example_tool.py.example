@@ -1,0 +1,21 @@
+# Rename to my_tool.py (drop .example) to add a new sidebar tool.
+#
+# 1. Subclass ToolPanel and set tool_id, tool_title, tool_description
+# 2. Implement build() to create widgets
+# 3. Set PANEL_CLASS at the bottom — registry auto-discovers this file
+
+from gui.base import ToolPanel
+
+
+class ExampleToolPanel(ToolPanel):
+    tool_id = "example"
+    tool_title = "Example Tool"
+    tool_description = "Short description shown under the title."
+
+    def build(self) -> None:
+        from tkinter import ttk
+
+        ttk.Label(self, text="Your tool UI goes here.").grid(sticky="w")
+
+
+PANEL_CLASS = ExampleToolPanel
