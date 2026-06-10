@@ -1,6 +1,6 @@
-import { APP_VERSION } from "./parser.js?v=13";
-import { initPinsTool } from "./tools/pins-tool.js?v=13";
-import { initPcbDxfTool } from "./tools/pcb-dxf-tool.js?v=13";
+import { APP_VERSION } from "./parser.js?v=14";
+import { initPinsTool } from "./tools/pins-tool.js?v=14";
+import { initPcbDxfTool } from "./tools/pcb-dxf-tool.js?v=14";
 
 const $ = (sel) => document.querySelector(sel);
 

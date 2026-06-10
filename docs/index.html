@@ -121,11 +121,21 @@
             />
           </div>
           <p class="option-hint" style="margin-top: 0.5rem">
-            Works best with a top-down photo or render on a contrasting background.
-            Crop to the board if possible.
+            Works best with a top-down photo on a contrasting background. For green
+            solder mask boards, use <strong>Auto</strong> or <strong>Green PCB</strong>.
+            Crop tightly around the board if possible.
           </p>
 
           <div class="pcb-options">
+            <label class="format-row" style="margin: 0">
+              Detection
+              <select id="pcb-detection">
+                <option value="auto" selected>Auto (recommended)</option>
+                <option value="green">Green PCB</option>
+                <option value="dark">Dark board on light background</option>
+                <option value="bright">Light board on dark background</option>
+              </select>
+            </label>
             <label class="slider-label">
               Threshold
               <span id="pcb-threshold-val">128</span>
@@ -210,6 +220,6 @@
 
     <div id="app-version" class="version-badge" aria-label="App version"></div>
 
-    <script type="module" src="js/app.js?v=13"></script>
+    <script type="module" src="js/app.js?v=14"></script>
   </body>
 </html>

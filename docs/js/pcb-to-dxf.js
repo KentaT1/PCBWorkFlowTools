@@ -77,6 +77,38 @@ export function buildMask(gray, width, height, threshold, invert) {
   return mask;
 }
 
+function isGreenPcbPixel(r, g, b) {
+  return (
+    g > 35 &&
+    g > r * 1.12 + 8 &&
+    g > b * 1.12 + 8 &&
+    !(r > 185 && g > 185 && b > 185)
+  );
+}
+
+/** Green solder mask on dark background (excludes white silkscreen). */
+export function buildGreenPcbMask(data, width, height) {
+  const mask = new Uint8Array(width * height);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    mask[p] = isGreenPcbPixel(data[i], data[i + 1], data[i + 2]) ? 1 : 0;
+  }
+  return mask;
+}
+
+function greenPixelRatio(data, width, height) {
+  let count = 0;
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    if (isGreenPcbPixel(data[i], data[i + 1], data[i + 2])) count++;
+  }
+  return count / (width * height);
+}
+
+function maskForegroundRatio(mask) {
+  let fg = 0;
+  for (const v of mask) if (v) fg++;
+  return fg / mask.length;
+}
+
 function dilate(mask, width, height, iterations = 1) {
   let cur = mask;
   for (let n = 0; n < iterations; n++) {
@@ -183,20 +215,58 @@ function touchesBorder(labels, width, height, labelId) {
   return false;
 }
 
+function componentBbox(labels, labelId, width, height) {
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  let found = false;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (labels[y * width + x] !== labelId) continue;
+      found = true;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  if (!found) return null;
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+}
+
 function pickBoardLabel(mask, labels, areas, count, width, height) {
+  const total = width * height;
+  const minArea = total * 0.04;
+  const maxArea = total * 0.82;
   let best = -1;
   let bestScore = -1;
+
   for (let id = 1; id <= count; id++) {
     const area = areas[id] ?? 0;
-    if (!area) continue;
+    if (!area || area < minArea || area > maxArea) continue;
+
     const border = touchesBorder(labels, width, height, id);
-    const score = border ? area * 0.35 : area;
+    const bb = componentBbox(labels, id, width, height);
+    if (!bb || bb.width < 12 || bb.height < 12) continue;
+
+    let score = area;
+    if (border) score *= 0.12;
+    const fill = area / Math.max(1, (bb.width + 2) * (bb.height + 2));
+    if (fill < 0.2) score *= 0.5;
+
     if (score > bestScore) {
       bestScore = score;
       best = id;
     }
   }
-  if (best < 0) throw new Error("No board shape found. Adjust threshold or invert.");
+
+  if (best < 0) {
+    throw new Error(
+      "No board shape found. Try Green PCB detection or adjust threshold/invert."
+    );
+  }
+
   const board = new Uint8Array(mask.length);
   for (let i = 0; i < labels.length; i++) {
     board[i] = labels[i] === best ? 1 : 0;
@@ -226,7 +296,7 @@ function isBoundary(mask, width, height, x, y) {
   return false;
 }
 
-const NEIGHBORS = [
+const MOORE_DIRS = [
   [1, 0],
   [1, 1],
   [0, 1],
@@ -237,56 +307,49 @@ const NEIGHBORS = [
   [1, -1],
 ];
 
-function traceBoundary(mask, width, height) {
-  let startX = -1;
-  let startY = -1;
-  outer: for (let y = 0; y < height; y++) {
+function findBoundaryStart(mask, width, height) {
+  for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (isBoundary(mask, width, height, x, y)) {
-        startX = x;
-        startY = y;
-        break outer;
-      }
+      if (isBoundary(mask, width, height, x, y)) return { x, y };
     }
   }
-  if (startX < 0) throw new Error("Could not trace board outline.");
+  return null;
+}
 
-  const visited = new Set();
+/** Moore-neighbor outer contour trace (robust on complex board shapes). */
+function traceBoundary(mask, width, height) {
+  const start = findBoundaryStart(mask, width, height);
+  if (!start) throw new Error("Could not trace board outline.");
+
   const path = [];
-  let x = startX;
-  let y = startY;
-  let guard = 0;
-  const maxSteps = width * height * 4;
+  let x = start.x;
+  let y = start.y;
+  let dir = 0;
+  const maxSteps = width * height * 2;
+  let steps = 0;
 
-  while (guard++ < maxSteps) {
-    const key = `${x},${y}`;
-    if (path.length && x === startX && y === startY) break;
-    if (!visited.has(key)) {
-      visited.add(key);
-      path.push({ x, y });
-    }
-
-    let next = null;
-    let bestDist = Infinity;
-    for (const [dx, dy] of NEIGHBORS) {
-      const nx = x + dx;
-      const ny = y + dy;
+  do {
+    path.push({ x, y });
+    let found = false;
+    for (let i = 0; i < 8; i++) {
+      const d = (dir + i + 5) % 8;
+      const nx = x + MOORE_DIRS[d][0];
+      const ny = y + MOORE_DIRS[d][1];
       if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
       if (!isBoundary(mask, width, height, nx, ny)) continue;
-      const nk = `${nx},${ny}`;
-      if (visited.has(nk) && !(nx === startX && ny === startY && path.length > 8)) continue;
-      const dist = (nx - x) ** 2 + (ny - y) ** 2;
-      if (dist < bestDist) {
-        bestDist = dist;
-        next = { x: nx, y: ny };
-      }
+      x = nx;
+      y = ny;
+      dir = d;
+      found = true;
+      break;
     }
-    if (!next) break;
-    x = next.x;
-    y = next.y;
-  }
+    if (!found) break;
+    steps++;
+  } while ((x !== start.x || y !== start.y || path.length < 4) && steps < maxSteps);
 
-  if (path.length < 8) throw new Error("Outline too small — check threshold settings.");
+  if (path.length < 8) {
+    throw new Error("Outline too small — try Green PCB detection or adjust threshold.");
+  }
   return path;
 }
 
@@ -355,9 +418,40 @@ export function pixelsToMm(points, width, height, mmPerPx) {
   }));
 }
 
+function buildMaskForMode(data, gray, width, height, mode, options) {
+  if (mode === "green") {
+    let mask = buildGreenPcbMask(data, width, height);
+    if (options.smooth !== false) mask = closeMask(mask, width, height);
+    return { mask, threshold: null };
+  }
+  const threshold = options.threshold ?? Math.round(otsuThreshold(gray));
+  const invert =
+    mode === "bright" ? true : mode === "dark" ? false : Boolean(options.invert);
+  let mask = buildMask(gray, width, height, threshold, invert);
+  if (options.smooth !== false) mask = closeMask(mask, width, height);
+  return { mask, threshold };
+}
+
+function extractFromMask(mask, width, height, options) {
+  const { labels, areas, count } = labelComponents(mask, width, height);
+  const boardMask = pickBoardLabel(mask, labels, areas, count, width, height);
+  let path = traceBoundary(boardMask, width, height);
+  path = simplifyPath(path, options.simplify ?? 1.5);
+  const bb = bbox(path);
+  return { boardMask, path, bb };
+}
+
+function resolveMaskModes(data, width, height, requested) {
+  if (requested && requested !== "auto") return [requested];
+  const modes = [];
+  if (greenPixelRatio(data, width, height) > 0.04) modes.push("green");
+  modes.push("dark", "bright");
+  return [...new Set(modes)];
+}
+
 /**
  * @param {HTMLCanvasElement} canvas
- * @param {{ threshold?: number|null, invert?: boolean, simplify?: number, mmPerPx?: number|null, boardWidthMm?: number|null, smooth?: boolean }} options
+ * @param {{ threshold?: number|null, invert?: boolean, simplify?: number, mmPerPx?: number|null, boardWidthMm?: number|null, smooth?: boolean, detection?: string }} options
  */
 export function extractOutlineFromCanvas(canvas, options = {}) {
   const width = canvas.width;
@@ -365,20 +459,43 @@ export function extractOutlineFromCanvas(canvas, options = {}) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const { data } = ctx.getImageData(0, 0, width, height);
   const gray = grayscale(data);
+  const modes = resolveMaskModes(data, width, height, options.detection);
 
-  const threshold =
-    options.threshold ?? Math.round(otsuThreshold(gray));
-  let mask = buildMask(gray, width, height, threshold, Boolean(options.invert));
-  if (options.smooth !== false) {
-    mask = closeMask(mask, width, height);
+  let lastError = null;
+  let best = null;
+
+  for (const mode of modes) {
+    try {
+      const { mask, threshold } = buildMaskForMode(data, gray, width, height, mode, options);
+      const fg = maskForegroundRatio(mask);
+      if (fg < 0.03 || fg > 0.9) continue;
+
+      const extracted = extractFromMask(mask, width, height, options);
+      const aspect =
+        extracted.bb.width / Math.max(1, extracted.bb.height);
+      if (aspect < 0.2 || aspect > 5) continue;
+      if (extracted.path.length < 24) continue;
+
+      const score =
+        extracted.path.length * 2000 +
+        extracted.bb.width * extracted.bb.height +
+        (mode === "green" ? 250000 : 0);
+      if (!best || score > best.score) {
+        best = { mode, threshold, mask, ...extracted, score };
+      }
+    } catch (err) {
+      lastError = err;
+    }
   }
 
-  const { labels, areas, count } = labelComponents(mask, width, height);
-  const boardMask = pickBoardLabel(mask, labels, areas, count, width, height);
-  let path = traceBoundary(boardMask, width, height);
-  path = simplifyPath(path, options.simplify ?? 1.5);
+  if (!best) {
+    throw (
+      lastError ??
+      new Error("Could not trace board outline. Try Green PCB detection or adjust threshold.")
+    );
+  }
 
-  const bb = bbox(path);
+  const { boardMask, path, bb, mode, threshold, mask } = best;
   let mmPerPx = options.mmPerPx;
   if (options.boardWidthMm && bb.width > 0) {
     mmPerPx = options.boardWidthMm / bb.width;
@@ -389,6 +506,7 @@ export function extractOutlineFromCanvas(canvas, options = {}) {
 
   return {
     threshold,
+    detection: mode,
     mmPerPx,
     pixelPath: path,
     mmPath: mmPoints,

@@ -15,6 +15,7 @@ export function initPcbDxfTool(root) {
   const simplifyInput = $("#pcb-simplify", root);
   const simplifyVal = $("#pcb-simplify-val", root);
   const boardWidthInput = $("#pcb-board-width", root);
+  const detectionInput = $("#pcb-detection", root);
   const exportUnitsInput = $("#pcb-export-units", root);
   const convertBtn = $("#pcb-convert-btn", root);
   const downloadBtn = $("#pcb-download-dxf", root);
@@ -59,10 +60,13 @@ export function initPcbDxfTool(root) {
         invert: invertInput.checked,
         simplify: Number(simplifyInput.value),
         boardWidthMm: boardWidth,
+        detection: detectionInput?.value ?? "auto",
       });
       lastResult = result;
-      thresholdInput.value = String(result.threshold);
-      thresholdVal.textContent = String(result.threshold);
+      if (result.threshold != null) {
+        thresholdInput.value = String(result.threshold);
+        thresholdVal.textContent = String(result.threshold);
+      }
 
       const maskCanvas = renderMaskPreview(
         result.boardMask,
@@ -74,7 +78,13 @@ export function initPcbDxfTool(root) {
 
       const units = exportUnitsInput?.value === "mm" ? "mm" : "mils";
       statsEl.hidden = false;
-      statsEl.textContent = `${result.pointCount} vertices · ${exportSizeLabel(result.mmPath, units)} · DXF export: 1 unit = 1 ${units === "mils" ? "mil" : "mm"}`;
+      const modeLabel =
+        result.detection === "green"
+          ? "green PCB"
+          : result.detection === "bright"
+            ? "bright"
+            : "dark";
+      statsEl.textContent = `${result.pointCount} vertices · ${exportSizeLabel(result.mmPath, units)} · detected via ${modeLabel} · DXF: 1 unit = 1 ${units === "mils" ? "mil" : "mm"}`;
       downloadBtn.hidden = false;
       setStatus("Outline ready — download DXF or tweak settings and Convert again.");
     } catch (err) {
@@ -155,6 +165,9 @@ export function initPcbDxfTool(root) {
   });
   boardWidthInput.addEventListener("input", () => {
     if (workingCanvas && lastResult) runExtract();
+  });
+  detectionInput?.addEventListener("change", () => {
+    if (workingCanvas) runExtract();
   });
   exportUnitsInput?.addEventListener("change", () => {
     if (lastResult?.mmPath?.length) {
