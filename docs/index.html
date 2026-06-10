@@ -3,18 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PDF to Altium Pin Table</title>
+    <title>PCB WorkFlow Tools</title>
     <meta
       name="description"
-      content="Convert datasheet pin definition PDFs to Altium Symbol Wizard columns. Runs in your browser; PDF never leaves your device."
+      content="PCB workflow utilities: datasheet pin tables for Altium and PCB image to DXF outline conversion. Runs in your browser."
     />
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
+    <nav class="tool-nav" aria-label="Tools">
+      <div class="tool-nav-inner">
+        <span class="tool-nav-brand">PCB WorkFlow Tools</span>
+        <div class="tool-tabs">
+          <button type="button" class="tool-tab active" data-tool="pins">
+            PDF → Pin Table
+          </button>
+          <button type="button" class="tool-tab" data-tool="pcb-dxf">
+            PCB Image → DXF
+          </button>
+        </div>
+      </div>
+    </nav>
+
     <div class="container">
       <header>
-        <h1>PDF → Altium Pin Table</h1>
-        <p>
+        <h1 id="header-title">PDF → Altium Pin Table</h1>
+        <p id="header-desc">
           Upload a datasheet pin-definition PDF (Espressif ESP32 or STM32 pinout
           tables). Get separate columns for <strong>Designator</strong>,
           <strong>Display Name</strong>, and <strong>Electrical Type</strong> to
@@ -23,76 +37,154 @@
         </p>
       </header>
 
-      <section class="panel">
-        <h2>1. Upload PDF</h2>
-        <div class="format-row">
-          <label for="datasheet-format">Datasheet format</label>
-          <select id="datasheet-format">
-            <option value="espressif">Espressif (ESP32…)</option>
-            <option value="stm32">STM32 pinout table</option>
-          </select>
-        </div>
-        <div class="format-row" id="stm-package-row" hidden>
-          <label for="stm-package">Package variant</label>
-          <select id="stm-package">
-            <option value="VFQFPN68">VFQFPN68</option>
-          </select>
-          <span class="option-hint">Detected from PDF when you choose a file</span>
-        </div>
-        <div class="file-row">
-          <input type="file" id="pdf-file" accept="application/pdf,.pdf" />
-        </div>
-        <div class="options">
-          <label>
-            <input type="checkbox" id="include-pin-name" />
-            Include Pin Name column
-          </label>
-          <label>
-            <input type="checkbox" id="number-gnd" />
-            Number GND pins (GND_01, GND_46, … uses pin number)
-          </label>
-        </div>
-        <div class="options separator-option">
-          <label for="function-separator">Function separator</label>
-          <div class="separator-controls">
-            <input
-              type="text"
-              id="function-separator"
-              value="/"
-              maxlength="4"
-              size="3"
-              title="Character between alternate pin functions"
-            />
-            <span class="sep-presets">
-              <button type="button" class="btn secondary sep-preset" data-sep="/">/</button>
-              <button type="button" class="btn secondary sep-preset" data-sep="-">-</button>
-              <button type="button" class="btn secondary sep-preset" data-sep=",">,</button>
-              <button type="button" class="btn secondary sep-preset" data-sep=".">.</button>
-            </span>
+      <div id="tool-pins">
+        <section class="panel">
+          <h2>1. Upload PDF</h2>
+          <div class="format-row">
+            <label for="datasheet-format">Datasheet format</label>
+            <select id="datasheet-format">
+              <option value="espressif">Espressif (ESP32…)</option>
+              <option value="stm32">STM32 pinout table</option>
+            </select>
           </div>
-          <span class="option-hint">e.g. GPIO1/RTC_GPIO1 or GPIO1-RTC_GPIO1</span>
-        </div>
-        <div class="actions">
-          <button type="button" class="btn" id="convert-btn">Convert</button>
-          <button type="button" class="btn secondary" id="copy-tsv" hidden>
-            Copy all (TSV)
-          </button>
-        </div>
-        <p id="status">Choose a PDF, then click Convert.</p>
-        <div id="error" hidden></div>
-      </section>
+          <div class="format-row" id="stm-package-row" hidden>
+            <label for="stm-package">Package variant</label>
+            <select id="stm-package">
+              <option value="VFQFPN68">VFQFPN68</option>
+            </select>
+            <span class="option-hint">Detected from PDF when you choose a file</span>
+          </div>
+          <div class="file-row">
+            <input type="file" id="pdf-file" accept="application/pdf,.pdf" />
+          </div>
+          <div class="options">
+            <label>
+              <input type="checkbox" id="include-pin-name" />
+              Include Pin Name column
+            </label>
+            <label>
+              <input type="checkbox" id="number-gnd" />
+              Number GND pins (GND_01, GND_46, … uses pin number)
+            </label>
+          </div>
+          <div class="options separator-option">
+            <label for="function-separator">Function separator</label>
+            <div class="separator-controls">
+              <input
+                type="text"
+                id="function-separator"
+                value="/"
+                maxlength="4"
+                size="3"
+                title="Character between alternate pin functions"
+              />
+              <span class="sep-presets">
+                <button type="button" class="btn secondary sep-preset" data-sep="/">/</button>
+                <button type="button" class="btn secondary sep-preset" data-sep="-">-</button>
+                <button type="button" class="btn secondary sep-preset" data-sep=",">,</button>
+                <button type="button" class="btn secondary sep-preset" data-sep=".">.</button>
+              </span>
+            </div>
+            <span class="option-hint">e.g. GPIO1/RTC_GPIO1 or GPIO1-RTC_GPIO1</span>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn" id="convert-btn">Convert</button>
+            <button type="button" class="btn secondary" id="copy-tsv" hidden>
+              Copy all (TSV)
+            </button>
+          </div>
+          <p id="pins-status" class="tool-status">Choose a PDF, then click Convert.</p>
+          <div id="pins-error" class="tool-error" hidden></div>
+        </section>
 
-      <section>
-        <h2 style="font-size: 1rem; margin-bottom: 0.75rem">2. Copy columns</h2>
-        <p style="color: var(--muted); font-size: 0.9rem; margin-top: 0">
-          Use <strong>Copy column</strong> (or select all in a box) and paste into
-          the matching Symbol Wizard field.
-        </p>
-        <div id="empty-state" style="margin-top: 1rem">
-          Results appear here after conversion.
-        </div>
-        <div id="columns" class="columns"></div>
-      </section>
+        <section>
+          <h2 class="section-title">2. Copy columns</h2>
+          <p class="section-lead">
+            Use <strong>Copy column</strong> (or select all in a box) and paste into
+            the matching Symbol Wizard field.
+          </p>
+          <div id="empty-state" class="empty-state">
+            Results appear here after conversion.
+          </div>
+          <div id="columns" class="columns"></div>
+        </section>
+      </div>
+
+      <div id="tool-pcb-dxf" hidden>
+        <section class="panel">
+          <h2>1. Upload PCB image</h2>
+          <div class="file-row">
+            <input
+              type="file"
+              id="pcb-image-file"
+              accept="image/png,image/jpeg,image/webp,image/bmp,image/*"
+            />
+          </div>
+          <p class="option-hint" style="margin-top: 0.5rem">
+            Works best with a top-down photo or render on a contrasting background.
+            Crop to the board if possible.
+          </p>
+
+          <div class="pcb-options">
+            <label class="slider-label">
+              Threshold
+              <span id="pcb-threshold-val">128</span>
+              <input type="range" id="pcb-threshold" min="0" max="255" value="128" />
+            </label>
+            <label class="slider-label">
+              Simplify
+              <span id="pcb-simplify-val">1.5</span> px
+              <input
+                type="range"
+                id="pcb-simplify"
+                min="0"
+                max="8"
+                step="0.5"
+                value="1.5"
+              />
+            </label>
+            <label>
+              <input type="checkbox" id="pcb-invert" />
+              Invert (board is lighter than background)
+            </label>
+            <label class="board-width-label">
+              Board width (mm)
+              <input
+                type="number"
+                id="pcb-board-width"
+                min="1"
+                step="0.1"
+                placeholder="auto"
+                title="Optional — sets DXF scale from known board width"
+              />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button type="button" class="btn" id="pcb-convert-btn">Convert outline</button>
+            <button type="button" class="btn secondary" id="pcb-download-dxf" hidden>
+              Download DXF
+            </button>
+          </div>
+          <p id="pcb-stats" class="pcb-stats" hidden></p>
+          <p id="pcb-status" class="tool-status">Choose an image, then click Convert outline.</p>
+          <div id="pcb-error" class="tool-error" hidden></div>
+        </section>
+
+        <section>
+          <h2 class="section-title">2. Preview</h2>
+          <div class="preview-grid">
+            <figure class="preview-card">
+              <figcaption>Source</figcaption>
+              <img id="pcb-preview-original" class="preview-img" alt="Source PCB image" hidden />
+            </figure>
+            <figure class="preview-card">
+              <figcaption>Detected outline</figcaption>
+              <img id="pcb-preview-mask" class="preview-img" alt="Detected board outline" hidden />
+            </figure>
+          </div>
+        </section>
+      </div>
 
       <footer>
         <p>
@@ -105,6 +197,6 @@
 
     <div id="app-version" class="version-badge" aria-label="App version"></div>
 
-    <script type="module" src="js/app.js?v=11"></script>
+    <script type="module" src="js/app.js?v=12"></script>
   </body>
 </html>

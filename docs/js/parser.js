@@ -10,7 +10,7 @@ import {
   STM_PACKAGES,
 } from "./parsers/stm32-pinout.js";
 
-export const APP_VERSION = "1.2.1";
+export const APP_VERSION = "1.3.0";
 
 export const PARSERS = {
   espressif: espressifParser,

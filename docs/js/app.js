@@ -1,237 +1,53 @@
-import {
-  APP_VERSION,
-  applyDisplayOptions,
-  convertPdfBuffer,
-  detectStmPackagesFromPdf,
-  pinsToColumns,
-  STM_PACKAGES,
-} from "./parser.js?v=11";
+import { APP_VERSION } from "./parser.js?v=12";
+import { initPinsTool } from "./tools/pins-tool.js?v=12";
+import { initPcbDxfTool } from "./tools/pcb-dxf-tool.js?v=12";
 
 const $ = (sel) => document.querySelector(sel);
 
 const versionBadge = $("#app-version");
 if (versionBadge) versionBadge.textContent = `v${APP_VERSION}`;
 
-const datasheetFormat = $("#datasheet-format");
-const stmPackageRow = $("#stm-package-row");
-const stmPackage = $("#stm-package");
-const fileInput = $("#pdf-file");
-const includePinName = $("#include-pin-name");
-const numberGnd = $("#number-gnd");
-const functionSeparator = $("#function-separator");
-const convertBtn = $("#convert-btn");
-const statusEl = $("#status");
-const columnsEl = $("#columns");
-const emptyEl = $("#empty-state");
-const errorEl = $("#error");
+const TOOL_COPY = {
+  pins: {
+    title: "PDF → Altium Pin Table",
+    description:
+      "Upload a datasheet pin-definition PDF (Espressif ESP32 or STM32 pinout tables). Get separate columns for Designator, Display Name, and Electrical Type to paste into Altium’s Symbol Wizard.",
+  },
+  "pcb-dxf": {
+    title: "PCB Image → DXF Outline",
+    description:
+      "Upload a photo or render of a PCB. Trace the board outline and download a clean DXF polyline for mechanical CAD or enclosure design. Processing runs entirely in your browser.",
+  },
+};
 
-let lastPins = [];
-let lastPdfBuffer = null;
+const toolPanels = {
+  pins: $("#tool-pins"),
+  "pcb-dxf": $("#tool-pcb-dxf"),
+};
 
-function setStatus(msg, isError = false) {
-  statusEl.textContent = msg;
-  statusEl.classList.toggle("error", isError);
-}
+const headerTitle = $("#header-title");
+const headerDesc = $("#header-desc");
 
-function showError(msg) {
-  errorEl.hidden = !msg;
-  errorEl.textContent = msg || "";
-}
-
-function isStmFormat() {
-  return datasheetFormat?.value === "stm32";
-}
-
-function updateFormatUi() {
-  const stm = isStmFormat();
-  stmPackageRow.hidden = !stm;
-  numberGnd.closest("label").hidden = stm;
-  if (stm) {
-    numberGnd.checked = false;
-  }
-}
-
-async function refreshStmPackages() {
-  if (!lastPdfBuffer || !isStmFormat()) return;
-  try {
-    const packages = await detectStmPackagesFromPdf(lastPdfBuffer);
-    stmPackage.innerHTML = "";
-    if (!packages.length) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "No STM package columns found";
-      stmPackage.appendChild(opt);
-      return;
-    }
-    for (const id of packages) {
-      const opt = document.createElement("option");
-      opt.value = id;
-      opt.textContent = STM_PACKAGES[id]?.label ?? id;
-      stmPackage.appendChild(opt);
-    }
-    if (!packages.includes(stmPackage.value)) {
-      stmPackage.value = packages.includes("VFQFPN68")
-        ? "VFQFPN68"
-        : packages[0];
-    }
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-async function copyText(text, label) {
-  await navigator.clipboard.writeText(text);
-  setStatus(label);
-}
-
-function getSeparator() {
-  const value = functionSeparator?.value ?? "/";
-  return value.length ? value : "/";
-}
-
-function getDisplayPins() {
-  return applyDisplayOptions(lastPins, {
-    numberGnd: numberGnd.checked,
-    separator: getSeparator(),
+function setActiveTool(toolId) {
+  document.querySelectorAll(".tool-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.tool === toolId);
   });
+  for (const [id, panel] of Object.entries(toolPanels)) {
+    if (panel) panel.hidden = id !== toolId;
+  }
+  const copy = TOOL_COPY[toolId] ?? TOOL_COPY.pins;
+  if (headerTitle) headerTitle.textContent = copy.title;
+  if (headerDesc) headerDesc.textContent = copy.description;
+  document.title = `${copy.title} · PCB WorkFlow Tools`;
+  sessionStorage.setItem("pcbwf-tool", toolId);
 }
 
-function renderColumns() {
-  const pins = getDisplayPins();
-  const cols = pinsToColumns(pins, includePinName.checked);
-  columnsEl.innerHTML = "";
-  emptyEl.hidden = true;
-
-  const names = Object.keys(cols);
-  const rowCount = cols[names[0]]?.length ?? 0;
-
-  for (const name of names) {
-    const col = document.createElement("div");
-    col.className = "column";
-
-    const header = document.createElement("div");
-    header.className = "column-header";
-    header.innerHTML = `<h3>${name}</h3>`;
-
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.className = "btn secondary";
-    copyBtn.textContent = "Copy column";
-    copyBtn.addEventListener("click", () => {
-      copyText(cols[name].join("\n"), `Copied ${rowCount} rows from “${name}”`);
-    });
-    header.appendChild(copyBtn);
-
-    const list = document.createElement("textarea");
-    list.className = "column-data";
-    list.readOnly = true;
-    list.value = cols[name].join("\n");
-    list.rows = Math.min(24, Math.max(8, rowCount));
-
-    col.append(header, list);
-    columnsEl.appendChild(col);
-  }
-
-  setStatus(`${rowCount} pins ready — copy each column into Symbol Wizard`);
-  $("#copy-tsv").hidden = false;
-}
-
-async function onConvert() {
-  showError("");
-  const file = fileInput.files?.[0];
-  if (!file) {
-    showError("Choose a PDF file first.");
-    return;
-  }
-
-  if (isStmFormat() && !stmPackage.value) {
-    showError("No STM package variant detected in this PDF.");
-    return;
-  }
-
-  convertBtn.disabled = true;
-  setStatus("Reading PDF…");
-
-  try {
-    const buffer = await file.arrayBuffer();
-    lastPdfBuffer = buffer.slice(0);
-    const pins = await convertPdfBuffer(buffer, {
-      format: datasheetFormat.value,
-      packageId: stmPackage.value,
-    });
-    if (!pins.length) {
-      const hint = isStmFormat()
-        ? "Try an STM32 Table 16-style pinout with package columns (UFQFPN48, VFQFPN68, …)."
-        : "Try an Espressif-style pin definitions table.";
-      showError(`No pin table found. ${hint}`);
-      emptyEl.hidden = false;
-      columnsEl.innerHTML = "";
-      setStatus("No pins found", true);
-      return;
-    }
-    lastPins = pins;
-    renderColumns();
-  } catch (err) {
-    console.error(err);
-    showError(err.message || String(err));
-    setStatus("Conversion failed", true);
-  } finally {
-    convertBtn.disabled = false;
-  }
-}
-
-convertBtn.addEventListener("click", onConvert);
-datasheetFormat?.addEventListener("change", () => {
-  updateFormatUi();
-  refreshStmPackages();
-  lastPins = [];
-  columnsEl.innerHTML = "";
-  emptyEl.hidden = false;
-  $("#copy-tsv").hidden = true;
-  showError("");
-});
-stmPackage?.addEventListener("change", () => {
-  if (lastPdfBuffer && isStmFormat()) onConvert();
+document.querySelectorAll(".tool-tab").forEach((tab) => {
+  tab.addEventListener("click", () => setActiveTool(tab.dataset.tool));
 });
 
-includePinName.addEventListener("change", () => {
-  if (lastPins.length) renderColumns();
-});
-numberGnd.addEventListener("change", () => {
-  if (lastPins.length) renderColumns();
-});
+initPinsTool(toolPanels.pins);
+initPcbDxfTool(toolPanels["pcb-dxf"]);
 
-functionSeparator?.addEventListener("input", () => {
-  if (lastPins.length) renderColumns();
-});
-
-document.querySelectorAll(".sep-preset").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (functionSeparator) functionSeparator.value = btn.dataset.sep ?? "/";
-    if (lastPins.length) renderColumns();
-  });
-});
-
-const copyTsvBtn = $("#copy-tsv");
-copyTsvBtn?.addEventListener("click", async () => {
-  if (!lastPins.length) return;
-  const cols = pinsToColumns(getDisplayPins(), includePinName.checked);
-  const names = Object.keys(cols);
-  const rows = cols[names[0]].map((_, i) => names.map((n) => cols[n][i]).join("\t"));
-  await copyText([names.join("\t"), ...rows].join("\n"), "Copied full table (TSV)");
-});
-
-fileInput.addEventListener("change", async () => {
-  if (fileInput.files?.[0]) {
-    setStatus(`Selected: ${fileInput.files[0].name}`);
-    showError("");
-    try {
-      lastPdfBuffer = (await fileInput.files[0].arrayBuffer()).slice(0);
-      await refreshStmPackages();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-});
-
-updateFormatUi();
+const saved = sessionStorage.getItem("pcbwf-tool");
+setActiveTool(saved === "pcb-dxf" ? "pcb-dxf" : "pins");
