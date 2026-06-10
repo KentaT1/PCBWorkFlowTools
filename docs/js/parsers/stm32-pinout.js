@@ -261,14 +261,15 @@ function mergeLineIntoRow(row, line) {
 }
 
 function buildOutputRow(row, packageId) {
-  const pinName = joinPinNameParts(row.pinNameParts);
+  const pinName = joinPinNameParts(row.pinNameParts) || String(row.designatorRaw);
   const altTokens = parseAltTokens(row.altParts.join(", "));
+  const displayTokens = altTokens.length ? [pinName, ...altTokens] : null;
   return {
     designator: parseDesignator(row.designatorRaw, packageId),
-    pinName: pinName || row.designatorRaw,
+    pinName,
     pinType: row.pinType,
-    functionTokens: altTokens.length ? altTokens : null,
-    displayName: altTokens.length ? altTokens.join("/") : pinName || String(row.designatorRaw),
+    functionTokens: displayTokens,
+    displayName: displayTokens ? displayTokens.join("/") : pinName,
     electricalType: altiumElectricalType(row.pinType),
   };
 }
