@@ -15,8 +15,8 @@
       <header>
         <h1>PDF → Altium Pin Table</h1>
         <p>
-          Upload a datasheet pin-definition PDF (e.g. Espressif modules). Get
-          separate columns for <strong>Designator</strong>,
+          Upload a datasheet pin-definition PDF (Espressif ESP32 or STM32 pinout
+          tables). Get separate columns for <strong>Designator</strong>,
           <strong>Display Name</strong>, and <strong>Electrical Type</strong> to
           paste into Altium’s Symbol Wizard. Processing happens entirely in your
           browser.
@@ -25,6 +25,20 @@
 
       <section class="panel">
         <h2>1. Upload PDF</h2>
+        <div class="format-row">
+          <label for="datasheet-format">Datasheet format</label>
+          <select id="datasheet-format">
+            <option value="espressif">Espressif (ESP32…)</option>
+            <option value="stm32">STM32 pinout table</option>
+          </select>
+        </div>
+        <div class="format-row" id="stm-package-row" hidden>
+          <label for="stm-package">Package variant</label>
+          <select id="stm-package">
+            <option value="VFQFPN68">VFQFPN68</option>
+          </select>
+          <span class="option-hint">Detected from PDF when you choose a file</span>
+        </div>
         <div class="file-row">
           <input type="file" id="pdf-file" accept="application/pdf,.pdf" />
         </div>
@@ -91,6 +105,6 @@
 
     <div id="app-version" class="version-badge" aria-label="App version"></div>
 
-    <script type="module" src="js/app.js?v=9"></script>
+    <script type="module" src="js/app.js?v=10"></script>
   </body>
 </html>

@@ -63,6 +63,34 @@ header p {
   font-weight: 600;
 }
 
+.format-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.format-row label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.format-row select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.5rem;
+  font-family: inherit;
+  min-width: 12rem;
+}
+
+.format-row .option-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .file-row {
   display: flex;
   flex-wrap: wrap;

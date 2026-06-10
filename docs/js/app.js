@@ -1,16 +1,20 @@
 import {
+  APP_VERSION,
   applyDisplayOptions,
   convertPdfBuffer,
+  detectStmPackagesFromPdf,
   pinsToColumns,
-} from "./parser.js?v=9";
-
-export const APP_VERSION = "1.1.0";
+  STM_PACKAGES,
+} from "./parser.js?v=10";
 
 const $ = (sel) => document.querySelector(sel);
 
 const versionBadge = $("#app-version");
 if (versionBadge) versionBadge.textContent = `v${APP_VERSION}`;
 
+const datasheetFormat = $("#datasheet-format");
+const stmPackageRow = $("#stm-package-row");
+const stmPackage = $("#stm-package");
 const fileInput = $("#pdf-file");
 const includePinName = $("#include-pin-name");
 const numberGnd = $("#number-gnd");
@@ -22,6 +26,7 @@ const emptyEl = $("#empty-state");
 const errorEl = $("#error");
 
 let lastPins = [];
+let lastPdfBuffer = null;
 
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg;
@@ -31,6 +36,47 @@ function setStatus(msg, isError = false) {
 function showError(msg) {
   errorEl.hidden = !msg;
   errorEl.textContent = msg || "";
+}
+
+function isStmFormat() {
+  return datasheetFormat?.value === "stm32";
+}
+
+function updateFormatUi() {
+  const stm = isStmFormat();
+  stmPackageRow.hidden = !stm;
+  numberGnd.closest("label").hidden = stm;
+  if (stm) {
+    numberGnd.checked = false;
+  }
+}
+
+async function refreshStmPackages() {
+  if (!lastPdfBuffer || !isStmFormat()) return;
+  try {
+    const packages = await detectStmPackagesFromPdf(lastPdfBuffer);
+    stmPackage.innerHTML = "";
+    if (!packages.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "No STM package columns found";
+      stmPackage.appendChild(opt);
+      return;
+    }
+    for (const id of packages) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = STM_PACKAGES[id]?.label ?? id;
+      stmPackage.appendChild(opt);
+    }
+    if (!packages.includes(stmPackage.value)) {
+      stmPackage.value = packages.includes("VFQFPN68")
+        ? "VFQFPN68"
+        : packages[0];
+    }
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 async function copyText(text, label) {
@@ -98,14 +144,26 @@ async function onConvert() {
     return;
   }
 
+  if (isStmFormat() && !stmPackage.value) {
+    showError("No STM package variant detected in this PDF.");
+    return;
+  }
+
   convertBtn.disabled = true;
   setStatus("Reading PDF…");
 
   try {
     const buffer = await file.arrayBuffer();
-    const pins = await convertPdfBuffer(buffer);
+    lastPdfBuffer = buffer.slice(0);
+    const pins = await convertPdfBuffer(buffer, {
+      format: datasheetFormat.value,
+      packageId: stmPackage.value,
+    });
     if (!pins.length) {
-      showError("No pin table found. Try an Espressif-style pin definitions table.");
+      const hint = isStmFormat()
+        ? "Try an STM32 Table 16-style pinout with package columns (UFQFPN48, VFQFPN68, …)."
+        : "Try an Espressif-style pin definitions table.";
+      showError(`No pin table found. ${hint}`);
       emptyEl.hidden = false;
       columnsEl.innerHTML = "";
       setStatus("No pins found", true);
@@ -123,6 +181,19 @@ async function onConvert() {
 }
 
 convertBtn.addEventListener("click", onConvert);
+datasheetFormat?.addEventListener("change", () => {
+  updateFormatUi();
+  refreshStmPackages();
+  lastPins = [];
+  columnsEl.innerHTML = "";
+  emptyEl.hidden = false;
+  $("#copy-tsv").hidden = true;
+  showError("");
+});
+stmPackage?.addEventListener("change", () => {
+  if (lastPdfBuffer && isStmFormat()) onConvert();
+});
+
 includePinName.addEventListener("change", () => {
   if (lastPins.length) renderColumns();
 });
@@ -150,9 +221,17 @@ copyTsvBtn?.addEventListener("click", async () => {
   await copyText([names.join("\t"), ...rows].join("\n"), "Copied full table (TSV)");
 });
 
-fileInput.addEventListener("change", () => {
+fileInput.addEventListener("change", async () => {
   if (fileInput.files?.[0]) {
     setStatus(`Selected: ${fileInput.files[0].name}`);
     showError("");
+    try {
+      lastPdfBuffer = (await fileInput.files[0].arrayBuffer()).slice(0);
+      await refreshStmPackages();
+    } catch (err) {
+      console.error(err);
+    }
   }
 });
+
+updateFormatUi();
