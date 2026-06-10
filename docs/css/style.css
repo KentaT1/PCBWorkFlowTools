@@ -336,6 +336,30 @@ header p {
   border-radius: 4px;
 }
 
+.required {
+  color: var(--error);
+}
+
+.altium-hint {
+  margin: 0.85rem 0 0;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: rgba(61, 139, 253, 0.08);
+  border: 1px solid rgba(61, 139, 253, 0.25);
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.pcb-options select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.5rem;
+  font-family: inherit;
+}
+
 .pcb-stats {
   margin-top: 0.75rem;
   font-family: var(--mono);

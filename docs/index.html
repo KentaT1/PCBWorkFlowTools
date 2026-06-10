@@ -148,17 +148,30 @@
               Invert (board is lighter than background)
             </label>
             <label class="board-width-label">
-              Board width (mm)
+              Board width (mm) <span class="required">*</span>
               <input
                 type="number"
                 id="pcb-board-width"
                 min="1"
                 step="0.1"
-                placeholder="auto"
-                title="Optional — sets DXF scale from known board width"
+                placeholder="e.g. 56.0"
+                required
+                title="Measured edge-to-edge board width — required for correct DXF scale"
               />
             </label>
+            <label class="format-row" style="margin: 0">
+              DXF units (Altium import)
+              <select id="pcb-export-units">
+                <option value="mils" selected>Mils (recommended for Altium)</option>
+                <option value="mm">Millimeters</option>
+              </select>
+            </label>
           </div>
+          <p class="altium-hint">
+            <strong>Altium import:</strong> File → Import → DXF/DWG → choose
+            <strong>Model</strong> space → set <strong>1 AutoCAD unit = 1 mil</strong>
+            (or 1 mm if you exported millimeters). Match the DXF units dropdown above.
+          </p>
 
           <div class="actions">
             <button type="button" class="btn" id="pcb-convert-btn">Convert outline</button>
@@ -197,6 +210,6 @@
 
     <div id="app-version" class="version-badge" aria-label="App version"></div>
 
-    <script type="module" src="js/app.js?v=12"></script>
+    <script type="module" src="js/app.js?v=13"></script>
   </body>
 </html>

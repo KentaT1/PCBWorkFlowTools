@@ -4,7 +4,7 @@ import {
   detectStmPackagesFromPdf,
   pinsToColumns,
   STM_PACKAGES,
-} from "../parser.js?v=12";
+} from "../parser.js?v=13";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 

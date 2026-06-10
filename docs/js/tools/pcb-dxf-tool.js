@@ -1,4 +1,4 @@
-import { downloadDxf, outlineToDxf } from "../dxf-writer.js";
+import { downloadDxf, exportSizeLabel, outlineToDxf } from "../dxf-writer.js";
 import {
   extractOutlineFromCanvas,
   imageToWorkingCanvas,
@@ -15,6 +15,7 @@ export function initPcbDxfTool(root) {
   const simplifyInput = $("#pcb-simplify", root);
   const simplifyVal = $("#pcb-simplify-val", root);
   const boardWidthInput = $("#pcb-board-width", root);
+  const exportUnitsInput = $("#pcb-export-units", root);
   const convertBtn = $("#pcb-convert-btn", root);
   const downloadBtn = $("#pcb-download-dxf", root);
   const statusEl = $("#pcb-status", root);
@@ -48,11 +49,16 @@ export function initPcbDxfTool(root) {
     showError("");
     try {
       const boardWidth = parseFloat(boardWidthInput.value);
+      if (!Number.isFinite(boardWidth) || boardWidth <= 0) {
+        showError("Enter the real board width in mm so the DXF scales correctly.");
+        setStatus("Board width required", true);
+        return;
+      }
       const result = extractOutlineFromCanvas(workingCanvas, {
         threshold: thresholdManual ? Number(thresholdInput.value) : null,
         invert: invertInput.checked,
         simplify: Number(simplifyInput.value),
-        boardWidthMm: Number.isFinite(boardWidth) && boardWidth > 0 ? boardWidth : null,
+        boardWidthMm: boardWidth,
       });
       lastResult = result;
       thresholdInput.value = String(result.threshold);
@@ -66,8 +72,9 @@ export function initPcbDxfTool(root) {
       );
       showCanvas(maskCanvas, previewMask);
 
+      const units = exportUnitsInput?.value === "mm" ? "mm" : "mils";
       statsEl.hidden = false;
-      statsEl.textContent = `${result.pointCount} vertices · ${result.boardWidthMm.toFixed(2)} × ${result.boardHeightMm.toFixed(2)} mm · scale ${result.mmPerPx.toFixed(4)} mm/px`;
+      statsEl.textContent = `${result.pointCount} vertices · ${exportSizeLabel(result.mmPath, units)} · DXF export: 1 unit = 1 ${units === "mils" ? "mil" : "mm"}`;
       downloadBtn.hidden = false;
       setStatus("Outline ready — download DXF or tweak settings and Convert again.");
     } catch (err) {
@@ -125,9 +132,13 @@ export function initPcbDxfTool(root) {
 
   downloadBtn.addEventListener("click", () => {
     if (!lastResult?.mmPath?.length) return;
-    const dxf = outlineToDxf(lastResult.mmPath, { name: sourceName });
-    downloadDxf(dxf, `${sourceName}-outline.dxf`);
-    setStatus("DXF downloaded.");
+    const units = exportUnitsInput?.value === "mm" ? "mm" : "mils";
+    const dxf = outlineToDxf(lastResult.mmPath, { units });
+    downloadDxf(dxf, `${sourceName}-outline-${units}.dxf`);
+    const unitLabel = units === "mils" ? "mil" : "mm";
+    setStatus(
+      `DXF downloaded (${units}). In Altium: File → Import → DXF/DWG, Model space, 1 AutoCAD unit = 1 ${unitLabel}.`
+    );
   });
 
   thresholdInput.addEventListener("input", () => {
@@ -142,8 +153,14 @@ export function initPcbDxfTool(root) {
   invertInput.addEventListener("change", () => {
     if (workingCanvas) runExtract();
   });
-  boardWidthInput.addEventListener("change", () => {
+  boardWidthInput.addEventListener("input", () => {
     if (workingCanvas && lastResult) runExtract();
+  });
+  exportUnitsInput?.addEventListener("change", () => {
+    if (lastResult?.mmPath?.length) {
+      const units = exportUnitsInput.value === "mm" ? "mm" : "mils";
+      statsEl.textContent = `${lastResult.pointCount} vertices · ${exportSizeLabel(lastResult.mmPath, units)} · DXF export: 1 unit = 1 ${units === "mils" ? "mil" : "mm"}`;
+    }
   });
 
   fileInput.addEventListener("change", () => {
